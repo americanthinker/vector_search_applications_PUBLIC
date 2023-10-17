@@ -298,7 +298,6 @@ class Vectorizor:
             doc = {k:v for k,v in meta.items() if k != 'content'}
             doc['content'] = text_tuple[0]
             doc['content_embedding'] = text_tuple[1].tolist()
-            if create_doc_id:
-              doc['doc_id'] = video_id + '_' + str(i)
+            doc['doc_id'] = video_id + '_' + str(i)
             joined_documents.append(doc)
         return joined_documents
