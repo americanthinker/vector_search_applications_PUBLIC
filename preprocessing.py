@@ -17,7 +17,11 @@ import pathlib
 
 ## Set of helper functions that support data preprocessing 
 class FileIO:
-    
+    '''
+    Convenience class for saving and loading data in various formats to/from disk.
+    Currently supports parquet and json formats.
+    '''
+
     def save_as_parquet(self, 
                         file_path: str, 
                         data: Union[List[dict], pd.DataFrame], 
@@ -57,7 +61,7 @@ class FileIO:
             file_name = os.path.basename(file_path)
             dir_structure = file_path.replace(file_name, '')
             pathlib.Path(dir_structure).mkdir(parents=True, exist_ok=True)
-            
+    
     def load_parquet(self, file_path: str, verbose: bool=True) -> List[dict]:
         '''
         Loads parquet from disk, converts to pandas DataFrame as intermediate
@@ -74,7 +78,20 @@ class FileIO:
             print(f'Memory Usage: {memory_usage}+ MB')
         list_of_dicts = df.to_dict('records')
         return list_of_dicts
-        
+    
+    def save_as_json(self, 
+                     file_path: str, 
+                     data: List[dict], 
+                     indent: int=4,
+                     overwrite: bool=False
+                     ) -> None:
+        if not file_path.endswith('json'):
+            file_path = self._rename_file_extension(file_path, 'json')
+        self._check_file_path(file_path, overwrite=overwrite)
+        with open(file_path, 'w') as f:
+            json.dump(data, f, indent=indent)
+        logger.info(f'Data saved as json file here: {file_path}')
+
 class Utilities: 
 
     def json_data_loader(self, file_path: str):
@@ -96,6 +113,12 @@ class Utilities:
         title = os.path.splitext(title)[0]
         return title
 
+    def create_video_url(self, video_id: str, playlist_id: str):
+        '''
+        Creates a hyperlink to a video episode given a video_id and playlist_id.
+        '''
+        return f'https://www.youtube.com/watch?v={video_id}&list={playlist_id}'
+        
     def get_content_lengths(self, 
                             list_of_dicts: List[dict], 
                             use_tokens: bool=True, 
@@ -124,73 +147,6 @@ class Utilities:
                 continue
 
 class Splitters:
-    
-    def sentence_splitter(self, text: str) -> List[str]:
-        '''
-        Given a piece of text, returns text split into a list of sentences at 
-        defined sentence breaks. 
-
-        Args
-        -----
-        text : str
-            Piece of text or document in string format. 
-
-        Returns
-        --------
-            List of sentences demarcated by sentence boundaries (period, ? !).
-
-        '''
-        #Adding a period at the end of the string to account for text (such as found in Powerpoint presentations)
-        #that do not end with sentence boundaries i.e. periods, question marks, etc.
-        text = text + '.'
-        alphabets= "([A-Za-z])"
-        prefixes = "(Mr|St|Mrs|Ms|Dr|Col|Gen|Pfc|Spc|Maj|Lt|Adm|Capt)[.]"
-        suffixes = "(Inc|Ltd|Jr|Sr|Co)"
-        starters = "(Mr|Mrs|Ms|Dr|He\s|She\s|It\s|They\s|Their\s|Our\s|We\s|But\s|However\s|That\s|This\s|Wherever)"
-        acronyms = "([A-Z][.][A-Z][.](?:[A-Z][.])?)"
-        websites = "[.](com|net|org|io|gov)"
-        digits = "([0-9])"
-        text = " " + text + "  "
-        text = text.replace("\n"," ")
-        text = re.sub(digits + "[.]" + digits, "\\1<prd>\\2", text)
-        text = re.sub(digits + "[.]" + " " + digits, "\\1<prd>\\2", text)
-        text = re.sub(prefixes,"\\1<prd>",text)
-        text = re.sub(websites,"<prd>\\1",text)
-        if "Ph.D" in text: text = text.replace("Ph.D","Ph<prd>D<prd>")
-        if "e.g." in text: text = text.replace("e.g.","e<prd>g<prd>")
-        if "e. g." in text: text = text.replace("e. g.","e<prd>g<prd>")
-        if "i.e." in text: text = text.replace("i.e.","i<prd>e<prd>") 
-        if "i. e." in text: text = text.replace("i. e.","i<prd>e<prd>") 
-        if "et. al." in text: text = text.replace("et. al.", 'et<prd>al<prd>')
-        if "Fig. " in text: text = text.replace("Fig. ", "Fig.<prd>")
-        text = re.sub("\s" + alphabets + "[.] "," \\1<prd> ",text)
-        text = re.sub(acronyms+" "+starters,"\\1<stop> \\2",text)
-        text = re.sub(alphabets + "[.]" + alphabets + "[.]" + alphabets + "[.]","\\1<prd>\\2<prd>\\3<prd>",text)
-        text = re.sub(alphabets + "[.]" + alphabets + "[.]","\\1<prd>\\2<prd>",text)
-        text = re.sub(" "+suffixes+"[.] "+starters," \\1<stop> \\2",text)
-        text = re.sub(" "+suffixes+"[.]"," \\1<prd>",text)
-        text = re.sub(" " + alphabets + "[.]"," \\1<prd>",text)
-        if "”" in text: text = text.replace(".”","”.")
-        if "\"" in text: text = text.replace(".\"","\".")
-        if "!" in text: text = text.replace("!\"","\"!")
-        if "?" in text: text = text.replace("?\"","\"?")
-        text = text.replace(".",".<stop>")
-        text = text.replace("?","?<stop>")
-        text = text.replace("!","!<stop>")
-        text = text.replace("<prd>",".")
-        sentences = text.split("<stop>")
-        sentences = sentences[:-1]
-        sentences = [s.strip() for s in sentences]
-        sentences = [re.sub('\s+', ' ', sent) for sent in sentences]
-
-        #remove the period at the end of the last sentence, that was inserted at the beginning of this function
-        if sentences:
-            last_sentence = sentences[-1][:-1]
-            sentences = sentences[:-1]
-            if last_sentence:
-                sentences.append(last_sentence)
-
-        return sentences
 
     def split_corpus(self,
                      corpus: List[dict], 
@@ -210,7 +166,7 @@ class Splitters:
                 split_dict[i].append(chunk)
             return split_dict
         return doc_idxs, text_chunks
-
+        
     def easy_split_corpus( self,
                   corpus: List[dict], 
                   text_splitter: SentenceSplitter, 
@@ -226,7 +182,7 @@ class Splitters:
             splits = text_splitter.split_text(doc.get(content_key, ''))
             text_chunks[video_id] = splits
         return text_chunks
-        
+    
 class Vectorizor:
 
     def __init__(self, model_name_or_path: str='all-MiniLM-L6-v2'):
@@ -289,15 +245,5 @@ class Vectorizor:
                         doc['doc_id'] = doc['video_id'] + '_' + str(i)
                 joined_documents.append(doc)
         return joined_documents
+    
 
-    def join_metadata_version2(self, corpus: List[dict], text_vector_dict: dict) -> List[dict]:
-        joined_documents = []
-        for video_id in text_vector_dict.keys():
-          meta = corpus[video_id]
-          for i, text_tuple in enumerate(text_vector_dict[video_id]):
-            doc = {k:v for k,v in meta.items() if k != 'content'}
-            doc['content'] = text_tuple[0]
-            doc['content_embedding'] = text_tuple[1].tolist()
-            doc['doc_id'] = video_id + '_' + str(i)
-            joined_documents.append(doc)
-        return joined_documents
